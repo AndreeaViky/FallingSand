@@ -2,7 +2,6 @@ function make2DArray(cols, rows) {
   let arr = new Array(cols);
   for (let i = 0; i < arr.length; i++) {
     arr[i] = new Array(rows);
-    // Fill the array with 0s
     for (let j = 0; j < arr[i].length; j++) {
       arr[i][j] = 0;
     }
@@ -10,36 +9,33 @@ function make2DArray(cols, rows) {
   return arr;
 }
 
-// Open camera 
+// Camera video și handpose
 let capture;
+let handVideo;
 let cameraStarted = false;
+let handposeModel;
+let predictions = [];
 
-// The grid
+// Grid
 let grid;
 let velocityGrid;
 
-// hand
-let handpose;
-let hands = [];
-let video;
-let px = 0, py = 0;
-
-
-// How big is each square?
+// Setări nisip
 let w = 5;
 let cols, rows;
 let hueValue = 200;
-
 let gravity = 0.1;
 
-// Check if a row is within the bounds
 function withinCols(i) {
   return i >= 0 && i <= cols - 1;
 }
 
-// Check if a column is within the bounds
 function withinRows(j) {
   return j >= 0 && j <= rows - 1;
+}
+
+function preload() {
+  handposeModel = ml5.handPose({ flipped: true });
 }
 
 function setup() {
@@ -48,51 +44,74 @@ function setup() {
   cols = width / w;
   rows = height / w;
   grid = make2DArray(cols, rows);
-  velocityGrid = make2DArray(cols, rows, 1);
+  velocityGrid = make2DArray(cols, rows);
 
-  // Ascundem chenarul camerei inițial, atunci cand butonul nu este apasat 
-  select('#cameraContainer').style('display', 'none');
+  select("#cameraContainer").style("display", "none");
 
-  // Buton pentru salvare
-  const saveBtn = select('#saveBtn');
+  const saveBtn = select("#saveBtn");
   saveBtn.mousePressed(() => {
-    saveCanvas('cadru_sand', 'png');
+    saveCanvas("cadru_sand", "png");
   });
 
-  // Buton pentru pornirea camerei
-  const cameraBtn = select('#cameraBtn');
+  const cameraBtn = select("#cameraBtn");
   cameraBtn.mousePressed(() => {
     if (!cameraStarted) {
       capture = createCapture(VIDEO);
-      capture.size(320, 240);
-      capture.parent('cameraContainer');
+      capture.size(600, 500);
+      capture.parent("cameraContainer");
       capture.show();
-      select('#cameraContainer').style('display', 'block'); // afisare chenarul verde
+      select("#cameraContainer").style("display", "block");
       cameraStarted = true;
-      cameraBtn.html('Oprește camera');
-    } else {
-      if (capture) {
-        capture.remove();
-        capture = null;
-      }
-      select('#cameraContainer').style('display', 'none'); // ascundere chenarul verde
-      cameraStarted = false;
-      cameraBtn.html('Pornește camera');
+      cameraBtn.html("Oprește camera");
+
+      // Pornim handpose
+      handVideo = createCapture(VIDEO);
+      handVideo.size(600, 500);
+      handVideo.hide();
+
+      handposeModel.detectStart(handVideo, (res) => (predictions = res));
+      cameraStarted = true;
+      cameraBtn.html("Pornește camera");
     }
   });
 }
-
 
 function mouseDragged() {}
 
 function draw() {
   background(0);
+  let mouseCol = -1;
+  let mouseRow = -1;
+  if (cameraStarted && predictions.length > 0) {
+    let hand = predictions[0];
+    let index = hand.index_finger_tip;
+    let thumb = hand.thumb_tip;
+
+    // Compute midpoint between index finger and thumb
+    let x = (index.x + thumb.x) * 0.5;
+    let y = (index.y + thumb.y) * 0.5;
+
+    // Draw only if fingers are close together
+    let d = dist(index.x, index.y, thumb.x, thumb.y);
+
+    // Indicator 
+    noFill();
+    stroke(60, 255, 255); // yellow
+    strokeWeight(2);
+    ellipse(x, y, 20);
+
+    if (d < 30) {
+      mouseCol = floor(index.x / w);
+      mouseRow = floor(index.y / w);
+    }
+  }
 
   if (mouseIsPressed) {
-    let mouseCol = floor(mouseX / w);
-    let mouseRow = floor(mouseY / w);
+    mouseCol = floor(mouseX / w);
+    mouseRow = floor(mouseY / w);
+  }
 
-    // Randomly add an area of sand particles
+  if (mouseCol != -1 && mouseRow != -1) {
     let matrix = 5;
     let extent = floor(matrix / 2);
     for (let i = -extent; i <= extent; i++) {
@@ -107,51 +126,39 @@ function draw() {
         }
       }
     }
-    // Change the color of the sand over time
     hueValue += 0.5;
     if (hueValue > 360) {
       hueValue = 1;
     }
   }
 
-  //frameRate(1);
-
-  // Draw the sand
+  // Desenează nisipul
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
       noStroke();
       if (grid[i][j] > 0) {
         fill(grid[i][j], 255, 255);
-        let x = i * w;
-        let y = j * w;
-        square(x, y, w);
+        square(i * w, j * w, w);
       }
     }
   }
 
-  // Create a 2D array for the next frame of animation
   let nextGrid = make2DArray(cols, rows);
   let nextVelocityGrid = make2DArray(cols, rows);
 
-  // Check every cell
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
-      // What is the state?
       let state = grid[i][j];
       let velocity = velocityGrid[i][j];
       let moved = false;
+
       if (state > 0) {
         let newPos = int(j + velocity);
         for (let y = newPos; y > j; y--) {
           let below = grid[i][y];
-          let dir = 1;
-          if (random(1) < 0.5) {
-            dir *= -1;
-          }
-          let belowA = -1;
-          let belowB = -1;
-          if (withinCols(i + dir)) belowA = grid[i + dir][y];
-          if (withinCols(i - dir)) belowB = grid[i - dir][y];
+          let dir = random(1) < 0.5 ? -1 : 1;
+          let belowA = withinCols(i + dir) ? grid[i + dir][y] : -1;
+          let belowB = withinCols(i - dir) ? grid[i - dir][y] : -1;
 
           if (below === 0) {
             nextGrid[i][y] = state;
@@ -173,11 +180,12 @@ function draw() {
       }
 
       if (state > 0 && !moved) {
-        nextGrid[i][j] = grid[i][j];
-        nextVelocityGrid[i][j] = velocityGrid[i][j] + gravity;
+        nextGrid[i][j] = state;
+        nextVelocityGrid[i][j] = velocity + gravity;
       }
     }
   }
+
   grid = nextGrid;
   velocityGrid = nextVelocityGrid;
 }

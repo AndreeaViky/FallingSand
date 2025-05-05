@@ -2,7 +2,7 @@
 
 let video;
 let handPose;
-let hands = [];
+let predictions = [];
 
 function preload() {
   // Initialize HandPose model with flipped video input
@@ -10,11 +10,11 @@ function preload() {
 }
 
 function mousePressed() {
-  console.log(hands);
+  console.log(predictions);
 }
 
 function gotHands(results) {
-  hands = results;
+  predictions = results;
 }
 
 function setup() {
@@ -30,8 +30,8 @@ function draw() {
   image(video, 0, 0);
 
   // Ensure at least one hand is detected
-  if (hands.length > 0) {
-    for (let hand of hands) {
+  if (predictions.length > 0) {
+    for (let hand of predictions) {
       if (hand.confidence > 0.1) {
         // Loop through keypoints and draw circles
         for (let i = 0; i < hand.keypoints.length; i++) {

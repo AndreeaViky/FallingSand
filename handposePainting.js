@@ -13,11 +13,11 @@ function preload() {
 }
 
 function mousePressed() {
-  console.log(hands);
+  console.log(predictions);
 }
 
 function gotHands(results) {
-  hands = results;
+  predictions = results;
 }
 
 function setup() {
@@ -38,8 +38,8 @@ function draw() {
   image(video, 0, 0);
 
   // Ensure at least one hand is detected
-  if (hands.length > 0) {
-    let hand = hands[0];
+  if (predictions.length > 0) {
+    let hand = predictions[0];
     let index = hand.index_finger_tip;
     let thumb = hand.thumb_tip;
 
